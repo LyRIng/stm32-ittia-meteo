@@ -1,0 +1,34 @@
+# Build output - MeteoH573 Config2
+Debug/
+Release/
+.build/
+*.o
+*.d
+*.elf
+*.map
+*.hex
+*.bin
+*.list
+*.lss
+*.srec
+
+# STM32CubeIDE / Eclipse metadata that can be regenerated
+.settings/
+.metadata/
+*.launch
+
+# OS / tools
+*.log
+*.tmp
+~$*
+.DS_Store
+Thumbs.db
+
+# Backup / archive
+*.bak
+*.old
+*.swp
+*.zip
+*.7z
+*.tar
+*.tar.gz
