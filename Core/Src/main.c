@@ -39,6 +39,9 @@
 #include <sys/time.h>
 #include <errno.h>
 
+// Added 27.1.26
+#include "meteo_thread.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -78,7 +81,9 @@ static uint32_t lastReceptionTick = 0;
 
 /* 17.1.26 ThreadX variables for meteo thread */
 TX_THREAD meteo_thread;
-uint8_t meteo_thread_stack[1024];  // Small stack for minimal thread
+// recommended 27.1. use UCHAR instead of uint8_t
+UCHAR meteo_thread_stack[1024];  // Small stack for minimal thread
+// uint8_t meteo_thread_stack[1024]; not ThreadX Native type
 
 /* USER CODE END PV */
 
@@ -90,7 +95,8 @@ void ProcessMeteoFrame(const char* frame);
 int ChecksumValidate(const char* frame);   // implement your CRCC logic
 
 // 17.1.26 Thread Entry function
-static void Meteo_Thread_Entry(ULONG thread_input);  // Thread entry function
+// 27.1 in meteo_thread.h
+// static void Meteo_Thread_Entry(ULONG thread_input);  // Thread entry function
 
 /* USER CODE END PFP */
 
@@ -150,47 +156,15 @@ int main(void)
     Error_Handler();
   }
 
-  /* We should never get here as control is now taken by the scheduler */
-
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   printf("COM - Ok Connection STM32H573! \r\n");
-
-  //printf("Byte pool size: %lu bytes\r\n", byte_pool.tx_byte_pool_memory_size);
-  //printf("Free before kernel: %lu bytes\r\n", byte_pool.tx_byte_pool_available_storage);
-  /* Create a minimal meteo thread for UART3 reception */
-  tx_thread_create(&meteo_thread, "Meteo Thread",
-                   Meteo_Thread_Entry, 0,
-                   meteo_thread_stack, sizeof(meteo_thread_stack),
-                   10, 10, TX_NO_TIME_SLICE, TX_AUTO_START);
-
-  printf("All threads created - starting ThreadX kernel\r\n");
+  // eliminate Task creation here, move to app_threadx.c (Claude 27.1.26)
+  printf("Starting ThreadX kernel\r\n");
   /* Initialize ThreadX 17.1.26 */
   MX_ThreadX_Init();
 
-
-    /* Start scheduler */
-    /* USER CODE BEGIN PREKERNEL  */
-    // Assuming byte_pool is accessible (extern from app_netxduo.c or app_threadx.c)
-    //extern TX_BYTE_POOL byte_pool;  // If not already declared in a header
-#ifdef TXBYTEPOOLCHECK
-    ULONG free_memory = 0;
-    if (byte_pool.tx_byte_pool_id == TX_BYTE_POOL_ID)  // Check if initialized
-    {
-        free_memory = byte_pool.tx_byte_pool_available_storage;
-        printf("Before tx_kernel_enter - ThreadX byte pool free: %lu bytes\r\n", free_memory);
-    }
-    else
-    {
-        printf("Byte pool not initialized yet\r\n");
-    }
-#endif
-
-    /* USER CODE END PREKERNEL */
-
-
-   // tx_kernel_enter();
-
+  // All rest eliminated 27.1.26 Claude
 
   /* Infinite loop */
   while (1)
@@ -267,7 +241,8 @@ void SystemClock_Config(void)
 // ISR Related Added 17.1.26
 
 /* Meteo thread entry function (runs the UART3 interrupt reception) */
-static void Meteo_Thread_Entry(ULONG thread_input)
+/* 27.1.26 not static any more */
+void Meteo_Thread_Entry(ULONG thread_input)
 {
   (void)thread_input;  // Unused
 
@@ -288,56 +263,74 @@ static void Meteo_Thread_Entry(ULONG thread_input)
 }
 
 /* UART3 RX complete callback (called on each byte) */
+// 27.1.26 20:16Hs
+// Frame correction suggested (Claude) wit complete String print added
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if (huart->Instance == USART3)
+if (huart->Instance == USART3)
+{
+  if (!frameInProgress)
   {
-    lastReceptionTick = HAL_GetTick();
-    printf("%02X ", rxByte);  // Print hex for debug
-
-    if (!frameInProgress)
+    /* Look for 'U' 'U' 'U' '$' sequence */
+    rxBuffer[rxIndex % 4] = rxByte;
+    if (rxIndex >= 3 &&
+        rxBuffer[(rxIndex - 3) % 4] == 'U' &&
+        rxBuffer[(rxIndex - 2) % 4] == 'U' &&
+        rxBuffer[(rxIndex - 1) % 4] == 'U' &&
+        rxBuffer[rxIndex % 4] == '$')
     {
-      // Sliding window for "UUU$"
-      rxBuffer[rxIndex % 4] = rxByte;
-      rxIndex++;
-      if (rxIndex >= 4 && strncmp(&rxBuffer[rxIndex % 4 - 3], FRAME_START, 4) == 0)
-      {
-        frameInProgress = 1;
-        strcpy(rxBuffer, "UUU$");
-        rxIndex = 4;
-        printf("\nFrame start detected\r\n");
-      }
+      frameInProgress = 1;
+      rxBuffer[0] = 'U';
+      rxBuffer[1] = 'U';
+      rxBuffer[2] = 'U';
+      rxBuffer[3] = '$';
+      rxIndex = 4;
     }
     else
     {
+      rxIndex++;
+    }
+  }
+  else
+  {
+    /* Collecting frame data */
+    if (rxIndex < RX_BUFFER_SIZE - 1)
+    {
       rxBuffer[rxIndex++] = rxByte;
-      if (rxIndex >= RX_BUFFER_SIZE - 1)
-      {
-        rxIndex = 0;  // Overflow protection
-        frameInProgress = 0;
-        printf("\nFrame overflow - discarded\r\n");
-      }
-      else if (rxIndex >= 7 && strstr(&rxBuffer[rxIndex - 6], FRAME_END) != NULL)
+
+      /* Check for end: *QQQ */
+      if (rxIndex >= 4 &&
+          rxBuffer[rxIndex - 4] == '*' &&
+          rxBuffer[rxIndex - 3] == 'Q' &&
+          rxBuffer[rxIndex - 2] == 'Q' &&
+          rxBuffer[rxIndex - 1] == 'Q')
       {
         rxBuffer[rxIndex] = '\0';
-        printf("\nFrame complete (%d bytes): %s\r\n", rxIndex, rxBuffer);
+
+        /* Process complete frame (do this in thread, not ISR!) */
+		  // 27.1.26 Added to check reception */
+		  printf("\nFrame complete (%d bytes): %s\r\n", rxIndex, rxBuffer);
 
         if (ChecksumValidate(rxBuffer))
         {
           ProcessMeteoFrame(rxBuffer);
-        }
-        else
-        {
-          printf("Checksum ERROR\r\n");
         }
 
         frameInProgress = 0;
         rxIndex = 0;
       }
     }
+    else
+    {
+      /* Buffer overflow */
+      frameInProgress = 0;
+      rxIndex = 0;
+    }
+  }
 
-    // Restart reception for next byte
-    HAL_UART_Receive_IT(&huart3, &rxByte, 1);
+  /* Restart reception */
+  HAL_UART_Receive_IT(&huart3, &rxByte, 1);
   }
 }
 

@@ -24,6 +24,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+// Added 27.1.26
+#include "meteo_thread.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -68,6 +71,25 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   /* USER CODE BEGIN App_ThreadX_MEM_POOL */
 
   /* USER CODE END App_ThreadX_MEM_POOL */
+  /* In app_threadx.c, around line 70 - Claude suggested 27.1.26 */
+  /* USER CODE BEGIN App_ThreadX_Init */
+
+  /* Declare thread and stack as static or extern */
+  extern TX_THREAD meteo_thread;
+  // recommended 27.1. use UCHAR instead of uint8_t
+  extern UCHAR meteo_thread_stack[1024];
+  //void Meteo_Thread_Entry(ULONG thread_input);
+
+  /* Create meteo thread INSIDE ThreadX */
+  if (tx_thread_create(&meteo_thread, "Meteo Thread",
+                       Meteo_Thread_Entry, 0,
+                       meteo_thread_stack, sizeof(meteo_thread_stack),
+                       10, 10, TX_NO_TIME_SLICE, TX_AUTO_START) != TX_SUCCESS)
+  {
+    return TX_THREAD_ERROR;
+  }
+  /* USER CODE END App_ThreadX_Init */
+
   CHAR *pointer;
 
   /* Allocate the stack for tx app thread  */
