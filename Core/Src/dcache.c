@@ -27,6 +27,7 @@
 DCACHE_HandleTypeDef hdcache1;
 
 /* DCACHE1 init function */
+
 void MX_DCACHE1_Init(void)
 {
 
@@ -49,6 +50,7 @@ void MX_DCACHE1_Init(void)
 
 }
 
+#ifdef USE_DCACHE_C_INSTEAD_OR_HAL_MSP
 void HAL_DCACHE_MspInit(DCACHE_HandleTypeDef* dcacheHandle)
 {
 
@@ -80,6 +82,7 @@ void HAL_DCACHE_MspDeInit(DCACHE_HandleTypeDef* dcacheHandle)
   /* USER CODE END DCACHE1_MspDeInit 1 */
   }
 }
+#endif
 
 /* USER CODE BEGIN 1 */
 

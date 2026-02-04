@@ -34,10 +34,16 @@
 #define DB_HARDWARE_CRYPTO      false
 
 /*----------   -----------*/
+
 #define DB_APP_MEM_BLOCK_SIZE      128
+// 2.2.26 if TOO Small, no effect
+// #define DB_APP_MEM_BLOCK_SIZE      1024
 
 /*----------   -----------*/
-#define DB_APP_MEM_SEG_BUFFER_SIZE      3*128*1024
+ // 2.2 TOO LARGE 384K!!
+ // 3.2 restore original
+#define DB_APP_MEM_SEG_BUFFER_SIZE      (3 * 128 * 1024)
+// #define DB_APP_MEM_SEG_BUFFER_SIZE      (64*1024)
 
 #ifdef __cplusplus
 }

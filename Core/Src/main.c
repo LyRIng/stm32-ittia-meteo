@@ -30,6 +30,8 @@
 /* USER CODE BEGIN Includes */
 /* Includes (add these if not already present) ok 14-01-26 */
 #include "stm32h5xx_hal.h"
+// Added 3.3.26
+#include "app_ittia.h"
 // #include "stm32h573i_discovery_lcd.h"   // or your BSP_LCD header 14-1-26 off
 #include <stdio.h>
 #include <string.h>
@@ -41,6 +43,9 @@
 
 // Added 27.1.26
 #include "meteo_thread.h"
+
+// *** NEW: Added for ITTIA DB integration ***
+#include "meteo_example.h"
 
 /* USER CODE END Includes */
 
@@ -69,6 +74,13 @@
 COM_InitTypeDef BspCOMInit;
 
 /* USER CODE BEGIN PV */
+
+/* 1-2-26- OSPI */
+XSPI_HandleTypeDef hospi1;              // ← ADD THIS LINE 2/2/26
+// DMA 3/2/26 from workin main.c
+DMA_HandleTypeDef handle_GPDMA1_Channel1;
+DMA_HandleTypeDef handle_GPDMA1_Channel0;
+
 /* Private variables 13-01-26 */
 extern UART_HandleTypeDef huart3;       // From CubeMX
 // extern UART_HandleTypeDef huart1;       // VCP
@@ -82,7 +94,8 @@ static uint32_t lastReceptionTick = 0;
 /* 17.1.26 ThreadX variables for meteo thread */
 TX_THREAD meteo_thread;
 // recommended 27.1. use UCHAR instead of uint8_t
-UCHAR meteo_thread_stack[1024];  // Small stack for minimal thread
+//#define METEO_THREAD_STACK_SIZE   2048   // This is fine 2/2/26
+UCHAR meteo_thread_stack[2048];  // Small stack for minimal thread
 // uint8_t meteo_thread_stack[1024]; not ThreadX Native type
 
 /* USER CODE END PV */
@@ -97,7 +110,9 @@ int ChecksumValidate(const char* frame);   // implement your CRCC logic
 // 17.1.26 Thread Entry function
 // 27.1 in meteo_thread.h
 // static void Meteo_Thread_Entry(ULONG thread_input);  // Thread entry function
-
+// Added 2/2/26 OCTO_SPI Init
+static void MX_OCTOSPI1_Init(void);     // ← ADD THIS LINE 2/2
+static void MX_GPDMA1_Init(void);       // ← Added 2/2/ 19:55
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -134,11 +149,19 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_GPDMA1_Init(); // Added 2.2.26 Last resource
+  MX_ICACHE_Init();
+  // 2.2.26 - OCTO_SPIInit
+  MX_OCTOSPI1_Init();        // ← ADD THIS LINE -2.2-26
+  MX_DCACHE1_Init();
+
   MX_ETH_Init();
   MX_USART3_UART_Init();
-  MX_DCACHE1_Init();
-  MX_ICACHE_Init();
+
+
+
   /* USER CODE BEGIN 2 */
+
   //- 14-1-26 NO COM Init yet here
   // MX_ThreadX_Init();
   /* USER CODE END 2 */
@@ -160,6 +183,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   printf("COM - Ok Connection STM32H573! \r\n");
   // eliminate Task creation here, move to app_threadx.c (Claude 27.1.26)
+
+  printf("\n=== METEO Weather Station with ITTIA DB ===\n");
+
+  // *** NEW: Initialize ITTIA DB ***
+  printf("Initializing ITTIA DB...\n");
+  MX_ITTIA_Init();
+
   printf("Starting ThreadX kernel\r\n");
   /* Initialize ThreadX 17.1.26 */
   MX_ThreadX_Init();
@@ -236,6 +266,89 @@ void SystemClock_Config(void)
   __HAL_FLASH_SET_PROGRAM_DELAY(FLASH_PROGRAMMING_DELAY_2);
 }
 
+// Added 2/2/26
+/**
+  * @brief OCTOSPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_OCTOSPI1_Init(void)
+{
+  /* USER CODE BEGIN OCTOSPI1_Init 0 */
+
+  /* USER CODE END OCTOSPI1_Init 0 */
+
+  HAL_XSPI_DLYB_CfgTypeDef HAL_OSPI_DLYB_Cfg_Struct = {0};
+
+  /* USER CODE BEGIN OCTOSPI1_Init 1 */
+
+  /* USER CODE END OCTOSPI1_Init 1 */
+
+  /* OCTOSPI1 parameter configuration*/
+  hospi1.Instance = OCTOSPI1;
+  hospi1.Init.FifoThresholdByte = 1;
+  hospi1.Init.MemoryMode = HAL_XSPI_SINGLE_MEM;
+  hospi1.Init.MemoryType = HAL_XSPI_MEMTYPE_MACRONIX;
+  hospi1.Init.MemorySize = HAL_XSPI_SIZE_512MB;
+  hospi1.Init.ChipSelectHighTimeCycle = 2;
+  hospi1.Init.FreeRunningClock = HAL_XSPI_FREERUNCLK_DISABLE;
+  hospi1.Init.ClockMode = HAL_XSPI_CLOCK_MODE_0;
+  hospi1.Init.WrapSize = HAL_XSPI_WRAP_NOT_SUPPORTED;
+  hospi1.Init.ClockPrescaler = 3;
+  hospi1.Init.SampleShifting = HAL_XSPI_SAMPLE_SHIFT_NONE;
+  hospi1.Init.DelayHoldQuarterCycle = HAL_XSPI_DHQC_ENABLE;
+  hospi1.Init.ChipSelectBoundary = HAL_XSPI_BONDARYOF_NONE;
+  hospi1.Init.DelayBlockBypass = HAL_XSPI_DELAY_BLOCK_ON;
+  hospi1.Init.Refresh = 0;
+  if (HAL_XSPI_Init(&hospi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  HAL_OSPI_DLYB_Cfg_Struct.Units = 56;
+  HAL_OSPI_DLYB_Cfg_Struct.PhaseSel = 2;
+  if (HAL_XSPI_DLYB_SetConfig(&hospi1, &HAL_OSPI_DLYB_Cfg_Struct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* USER CODE BEGIN OCTOSPI1_Init 2 */
+
+  /* USER CODE END OCTOSPI1_Init 2 */
+}
+
+// 2.2.26 dma1 ADDED From ITTIA_Nx_NoR_NanoEdgeAI
+/**
+  * @brief GPDMA1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_GPDMA1_Init(void)
+{
+
+  /* USER CODE BEGIN GPDMA1_Init 0 */
+
+  /* USER CODE END GPDMA1_Init 0 */
+
+  /* Peripheral clock enable */
+  __HAL_RCC_GPDMA1_CLK_ENABLE();
+
+  /* GPDMA1 interrupt Init */
+    HAL_NVIC_SetPriority(GPDMA1_Channel0_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(GPDMA1_Channel0_IRQn);
+    HAL_NVIC_SetPriority(GPDMA1_Channel1_IRQn, 0, 0);
+    HAL_NVIC_EnableIRQ(GPDMA1_Channel1_IRQn);
+
+  /* USER CODE BEGIN GPDMA1_Init 1 */
+
+  /* USER CODE END GPDMA1_Init 1 */
+  /* USER CODE BEGIN GPDMA1_Init 2 */
+
+  /* USER CODE END GPDMA1_Init 2 */
+
+}
+
+
+
 /* USER CODE BEGIN 4 */
 // Functions added 13.01.26 re-added here 14.1.26 -
 // ISR Related Added 17.1.26
@@ -310,11 +423,17 @@ if (huart->Instance == USART3)
 
         /* Process complete frame (do this in thread, not ISR!) */
 		  // 27.1.26 Added to check reception */
-		  printf("\nFrame complete (%d bytes): %s\r\n", rxIndex, rxBuffer);
+		  printf("\n[METEO Frame] (%d bytes): %s\r\n", rxIndex, rxBuffer);
 
         if (ChecksumValidate(rxBuffer))
         {
-          ProcessMeteoFrame(rxBuffer);
+          // *** MODIFIED: Call both display and stream functions ***
+          ProcessMeteoFrame(rxBuffer);           // Display on console/LCD
+          ProcessMeteoFrameToStream(rxBuffer);   // Store in ITTIA DB stream
+        }
+        else
+        {
+          printf("[METEO] Checksum validation failed\n");
         }
 
         frameInProgress = 0;
@@ -324,6 +443,7 @@ if (huart->Instance == USART3)
     else
     {
       /* Buffer overflow */
+      printf("[METEO] Buffer overflow - frame dropped\n");
       frameInProgress = 0;
       rxIndex = 0;
     }
@@ -349,9 +469,13 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 }
 
 
+
 /**
  * @brief  Parse the meteo frame and display values
  * @param  frame: null-terminated string starting with "UUU$" ... "*QQQ"
+ *
+ * NOTE: This function is unchanged - it still displays data as before.
+ * The new ProcessMeteoFrameToStream() function handles ITTIA DB storage.
  */
 void ProcessMeteoFrame(const char* frame)
 {

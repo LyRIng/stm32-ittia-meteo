@@ -17,7 +17,7 @@ extern "C" {
 
 /* Exported variables --------------------------------------------------------*/
 extern TX_THREAD meteo_thread;
-extern UCHAR meteo_thread_stack[1024];
+extern UCHAR meteo_thread_stack[2048];
 
 /* Exported functions --------------------------------------------------------*/
 void Meteo_Thread_Entry(ULONG thread_input);

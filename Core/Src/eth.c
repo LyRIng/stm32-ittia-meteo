@@ -70,6 +70,7 @@ void MX_ETH_Init(void)
 
 }
 
+#ifdef USE_ETH_C_INSTEAD_OR_HAL_MSP
 void HAL_ETH_MspInit(ETH_HandleTypeDef* ethHandle)
 {
 
@@ -177,7 +178,7 @@ void HAL_ETH_MspDeInit(ETH_HandleTypeDef* ethHandle)
   /* USER CODE END ETH_MspDeInit 1 */
   }
 }
-
+#endif
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */

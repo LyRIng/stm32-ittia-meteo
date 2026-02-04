@@ -65,7 +65,7 @@
 /*#define HAL_NAND_MODULE_ENABLED */
 #define HAL_NOR_MODULE_ENABLED
 /*#define HAL_OPAMP_MODULE_ENABLED */
-/*#define HAL_XSPI_MODULE_ENABLED */
+#define HAL_XSPI_MODULE_ENABLED
 /*#define HAL_OTFDEC_MODULE_ENABLED */
 /*#define HAL_PKA_MODULE_ENABLED */
 /*#define HAL_RNG_MODULE_ENABLED */
@@ -368,6 +368,7 @@
 
 #ifdef HAL_XSPI_MODULE_ENABLED
  #include "stm32h5xx_hal_xspi.h"
+ #include "stm32h5xx_ll_dlyb.h"    // New line added 1.2.26
 #endif /* HAL_XSPI_MODULE_ENABLED */
 
 #ifdef HAL_RNG_MODULE_ENABLED

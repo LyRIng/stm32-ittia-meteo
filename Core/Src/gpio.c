@@ -124,7 +124,12 @@ void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, MEMS_LED_Pin|DETECTN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOI, GPIO_PIN_9|AUDIO_NRST_Pin, GPIO_PIN_RESET);
+  // 3.2.26 HAL_GPIO_WritePin(GPIOI, GPIO_PIN_9|AUDIO_NRST_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level - OSPI Flash Reset */
+  HAL_GPIO_WritePin(GPIOI, GPIO_PIN_9, GPIO_PIN_SET);  // ← ADD THIS 3.2.26
+
+  /* 3.2.26 added Configure GPIO pin Output Level - LED */
+  HAL_GPIO_WritePin(GPIOF, GPIO_PIN_1, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(STMOD_17_GPIO_Port, STMOD_17_Pin, GPIO_PIN_RESET);
@@ -245,11 +250,20 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(uSD_DETECT_GPIO_Port, &GPIO_InitStruct);
 
+#ifdef ORI_GPIOC
   /*Configure GPIO pins : PI9 AUDIO_NRST_Pin */
   GPIO_InitStruct.Pin = GPIO_PIN_9|AUDIO_NRST_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
+#endif
+
+  /*3.2.26 Configure GPIO pin : PI9 - OSPI Flash Reset/Enable */
+  GPIO_InitStruct.Pin = GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOI, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PA10 PA9 */
@@ -426,6 +440,16 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(UCPD_FLT_GPIO_Port, &GPIO_InitStruct);
 
+  //Added3.2.26
+  /*Configure GPIO pin : PH14 */
+  GPIO_InitStruct.Pin = GPIO_PIN_14;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
+
+  /* Addede 3.2.26 EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI14_IRQn, 6, 0);
+  HAL_NVIC_EnableIRQ(EXTI14_IRQn);
 }
 
 /* USER CODE BEGIN 2 */
