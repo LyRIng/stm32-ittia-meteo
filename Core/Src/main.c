@@ -47,6 +47,12 @@
 // *** NEW: Added for ITTIA DB integration ***
 #include "meteo_example.h"
 
+// #define NORMAL_DB
+#define METEO_TEST_CONN
+#ifdef METEO_TEST_CONN
+#include "meteo_network_test.h"  // Add this line 4/2/26
+#endif
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -90,6 +96,7 @@ static char rxBuffer[RX_BUFFER_SIZE];
 static uint8_t rxIndex = 0;
 static uint8_t frameInProgress = 0;
 static uint32_t lastReceptionTick = 0;
+static uint32_t last_send_tick = 0;      // ← ADD THIS LINE 4/2/26
 
 /* 17.1.26 ThreadX variables for meteo thread */
 TX_THREAD meteo_thread;
@@ -187,8 +194,14 @@ int main(void)
   printf("\n=== METEO Weather Station with ITTIA DB ===\n");
 
   // *** NEW: Initialize ITTIA DB ***
+  #ifdef METEO_TEST_CONN
+  printf("Skipping ITTIA DB - Network test mode\n");
+  #endif
+  
+  #ifdef NORMAL_DB
   printf("Initializing ITTIA DB...\n");
   MX_ITTIA_Init();
+  #endif
 
   printf("Starting ThreadX kernel\r\n");
   /* Initialize ThreadX 17.1.26 */
@@ -378,7 +391,7 @@ void Meteo_Thread_Entry(ULONG thread_input)
 /* UART3 RX complete callback (called on each byte) */
 // 27.1.26 20:16Hs
 // Frame correction suggested (Claude) wit complete String print added
-
+#ifdef NORMAL_DB
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 if (huart->Instance == USART3)
@@ -453,6 +466,109 @@ if (huart->Instance == USART3)
   HAL_UART_Receive_IT(&huart3, &rxByte, 1);
   }
 }
+#endif
+
+#ifdef METEO_TEST_CONN
+
+/**
+  * @brief UART3 RX complete callback (called on each byte) 4/2/26
+  */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART3)
+  {
+    if (!frameInProgress)
+    {
+      /* Look for 'U' 'U' 'U' '$' sequence */
+      rxBuffer[rxIndex % 4] = rxByte;
+      if (rxIndex >= 3 &&
+          rxBuffer[(rxIndex - 3) % 4] == 'U' &&
+          rxBuffer[(rxIndex - 2) % 4] == 'U' &&
+          rxBuffer[(rxIndex - 1) % 4] == 'U' &&
+          rxBuffer[rxIndex % 4] == '$')
+      {
+        frameInProgress = 1;
+        rxBuffer[0] = 'U';
+        rxBuffer[1] = 'U';
+        rxBuffer[2] = 'U';
+        rxBuffer[3] = '$';
+        rxIndex = 4;
+      }
+      else
+      {
+        rxIndex++;
+      }
+    }
+    else
+    {
+      /* Collecting frame data */
+      if (rxIndex < RX_BUFFER_SIZE - 1)
+      {
+        rxBuffer[rxIndex++] = rxByte;
+
+        /* Check for end: *QQQ */
+        if (rxIndex >= 4 &&
+            rxBuffer[rxIndex - 4] == '*' &&
+            rxBuffer[rxIndex - 3] == 'Q' &&
+            rxBuffer[rxIndex - 2] == 'Q' &&
+            rxBuffer[rxIndex - 1] == 'Q')
+        {
+          rxBuffer[rxIndex] = '\0';
+
+          /* Frame complete - print it */
+          printf("\n[METEO Frame] (%d bytes): %s\r\n", rxIndex, rxBuffer);
+
+          /* Parse frame data - BYPASS CHECKSUM FOR DEMO */
+          uint32_t temp_adc = 0, baro_adc = 0, wdir = 0, wspeed = 0, volt = 0;
+          uint32_t crcc = 0;
+          
+          // Format: UUU$ttttt.bbbbb.dddd.sssss.vvv.CRCC*QQQ
+          if (sscanf(rxBuffer, "UUU$%5u.%5u.%4u.%5u.%3u.%4x*",
+                     &temp_adc, &baro_adc, &wdir, &wspeed, &volt, &crcc) >= 5)
+          {
+            // Convert ADC values to engineering units
+            float temp_c = (float)(temp_adc)/100.0;        // 08030 → 80.30°C
+            float pressure_hpa = (float)(baro_adc)/10.0;   // 00327 → 32.7 hPa
+
+            // Display parsed values
+            printf("[METEO] T=%.2f degC P=%.1fhPa WD=%u.%u deg WS=%u V=%umV CRC=0x%04X\n",
+                   temp_c, pressure_hpa, wdir/10, wdir%10, wspeed, volt, crcc);
+            
+            // *** SEND VIA UDP TO ANALITICA ***
+            // *** RATE LIMIT: Only send every 500ms ***
+            uint32_t now = HAL_GetTick();
+            if ((now - last_send_tick) > 500) {
+                    send_meteo_data_udp(temp_c, pressure_hpa,
+                                       (uint16_t)wdir, (uint16_t)wspeed,
+                                       (uint16_t)volt);
+                    last_send_tick = now;
+                }
+          }
+          else
+          {
+            printf("[METEO] Parse failed - check format\n");
+          }
+
+          /* Reset for next frame */
+          frameInProgress = 0;
+          rxIndex = 0;
+        }
+      }
+      else
+      {
+        /* Buffer overflow */
+        printf("[METEO] Buffer overflow - frame dropped\n");
+        frameInProgress = 0;
+        rxIndex = 0;
+      }
+    }
+
+    /* Restart reception for next byte */
+    HAL_UART_Receive_IT(&huart3, &rxByte, 1);
+  }
+}
+#endif
+
 
 /* UART3 error callback (clear framing errors) */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)

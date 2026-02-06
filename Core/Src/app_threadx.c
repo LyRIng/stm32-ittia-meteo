@@ -3,7 +3,7 @@
   ******************************************************************************
   * @file    app_threadx.c
   * @author  MCD Application Team
-  * @brief   ThreadX applicative file
+  * @brief   ThreadX applicative file 4/2/26 - METEO TEST CONN
   ******************************************************************************
     * @attention
   *
@@ -52,6 +52,10 @@
 
 // *** NEW: Configuration ***
 #define METEO_IDC_ENABLED  0  // Set to 0 to disable Analitica sync - testing 2/2
+
+// -4/2/26 DB problem bypass
+// #define NORMAL_DB
+#define METEO_TEST_CONN
 
 /* USER CODE END PD */
 
@@ -162,6 +166,7 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   * @param  thread_input: Hardcoded to 0.
   * @retval None
   */
+#ifdef NORMAL_DB
 void tx_app_thread_entry(ULONG thread_input)
 {
   /* USER CODE BEGIN tx_app_thread_entry */
@@ -201,6 +206,32 @@ void tx_app_thread_entry(ULONG thread_input)
 
   /* USER CODE END tx_app_thread_entry */
 }
+#endif
+
+#ifdef METEO_TEST_CONN 
+void tx_app_thread_entry(ULONG thread_input)
+{
+    (void)thread_input;
+    
+    printf("=== METEO Weather Station - Network Test Mode ===\n");
+    
+    // Wait for network to be ready (DHCP, etc.)
+    printf("Waiting for network initialization...\n");
+    tx_thread_sleep(200);  // 2 seconds
+    
+    // *** ADD THIS: Initialize network test ***
+    meteo_network_test_init();
+    
+    printf("=== System Ready - Waiting for METEO frames ===\n\n");
+    
+    // Rest of your thread code...
+    while(1)
+    {
+        tx_thread_sleep(100);
+    }
+}
+
+#endif
 
 #if METEO_IDC_ENABLED
 /**
