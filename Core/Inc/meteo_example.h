@@ -39,8 +39,8 @@ int run_meteo_example(db_media_driver_t driver, void * driver_info);
  */
 int run_meteo_idc_agent(const char * proto_name, void * proto_param);
 
-//3.2.26
-//void ProcessMeteoFrameToStream(const char* frame);
+//3.2.26 - commented out - 8.2.26 reinserted declaration
+void ProcessMeteoFrameToStream(const char* frame);
 
 /* Global stream environment shared by METEO threads */
 extern db_stream_environment_t meteo_stream_env;

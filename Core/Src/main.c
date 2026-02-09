@@ -47,6 +47,9 @@
 // *** NEW: Added for ITTIA DB integration ***
 #include "meteo_example.h"
 
+// 8.2.26 New checksum validation - Based on old CL2 (2014) -8-bit meteo.c/.h
+#include "meteo_checksum.h"  
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -348,7 +351,6 @@ static void MX_GPDMA1_Init(void)
 }
 
 
-
 /* USER CODE BEGIN 4 */
 // Functions added 13.01.26 re-added here 14.1.26 -
 // ISR Related Added 17.1.26
@@ -377,80 +379,87 @@ void Meteo_Thread_Entry(ULONG thread_input)
 
 /* UART3 RX complete callback (called on each byte) */
 // 27.1.26 20:16Hs
-// Frame correction suggested (Claude) wit complete String print added
-
+// Frame correction 8-2-26 with 16-bit checksum
+/* UART3 RX complete callback (called on each byte) */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-if (huart->Instance == USART3)
-{
-  if (!frameInProgress)
+  if (huart->Instance == USART3)
   {
-    /* Look for 'U' 'U' 'U' '$' sequence */
-    rxBuffer[rxIndex % 4] = rxByte;
-    if (rxIndex >= 3 &&
-        rxBuffer[(rxIndex - 3) % 4] == 'U' &&
-        rxBuffer[(rxIndex - 2) % 4] == 'U' &&
-        rxBuffer[(rxIndex - 1) % 4] == 'U' &&
-        rxBuffer[rxIndex % 4] == '$')
+    if (!frameInProgress)
     {
-      frameInProgress = 1;
-      rxBuffer[0] = 'U';
-      rxBuffer[1] = 'U';
-      rxBuffer[2] = 'U';
-      rxBuffer[3] = '$';
-      rxIndex = 4;
-    }
-    else
-    {
-      rxIndex++;
-    }
-  }
-  else
-  {
-    /* Collecting frame data */
-    if (rxIndex < RX_BUFFER_SIZE - 1)
-    {
-      rxBuffer[rxIndex++] = rxByte;
-
-      /* Check for end: *QQQ */
-      if (rxIndex >= 4 &&
-          rxBuffer[rxIndex - 4] == '*' &&
-          rxBuffer[rxIndex - 3] == 'Q' &&
-          rxBuffer[rxIndex - 2] == 'Q' &&
-          rxBuffer[rxIndex - 1] == 'Q')
+      /* Look for 'U' 'U' 'U' '$' sequence */
+      rxBuffer[rxIndex % 4] = rxByte;
+      if (rxIndex >= 3 &&
+          rxBuffer[(rxIndex - 3) % 4] == 'U' &&
+          rxBuffer[(rxIndex - 2) % 4] == 'U' &&
+          rxBuffer[(rxIndex - 1) % 4] == 'U' &&
+          rxBuffer[rxIndex % 4] == '$')
       {
-        rxBuffer[rxIndex] = '\0';
-
-        /* Process complete frame (do this in thread, not ISR!) */
-		  // 27.1.26 Added to check reception */
-		  printf("\n[METEO Frame] (%d bytes): %s\r\n", rxIndex, rxBuffer);
-
-        if (ChecksumValidate(rxBuffer))
-        {
-          // *** MODIFIED: Call both display and stream functions ***
-          ProcessMeteoFrame(rxBuffer);           // Display on console/LCD
-          ProcessMeteoFrameToStream(rxBuffer);   // Store in ITTIA DB stream
-        }
-        else
-        {
-          printf("[METEO] Checksum validation failed\n");
-        }
-
-        frameInProgress = 0;
-        rxIndex = 0;
+        frameInProgress = 1;
+        rxBuffer[0] = 'U';
+        rxBuffer[1] = 'U';
+        rxBuffer[2] = 'U';
+        rxBuffer[3] = '$';
+        rxIndex = 4;
+      }
+      else
+      {
+        rxIndex++;
       }
     }
     else
     {
-      /* Buffer overflow */
-      printf("[METEO] Buffer overflow - frame dropped\n");
-      frameInProgress = 0;
-      rxIndex = 0;
-    }
-  }
+      /* Collecting frame data */
+      if (rxIndex < RX_BUFFER_SIZE - 1)
+      {
+        rxBuffer[rxIndex++] = rxByte;
 
-  /* Restart reception */
-  HAL_UART_Receive_IT(&huart3, &rxByte, 1);
+        /* Check for end: *QQQ */
+        if (rxIndex >= 4 &&
+            rxBuffer[rxIndex - 4] == '*' &&
+            rxBuffer[rxIndex - 3] == 'Q' &&
+            rxBuffer[rxIndex - 2] == 'Q' &&
+            rxBuffer[rxIndex - 1] == 'Q')
+        {
+          rxBuffer[rxIndex] = '\0';
+
+          /* Frame complete - print it */
+          printf("\n[METEO Frame] (%d bytes): %s\r\n", rxIndex, rxBuffer);
+
+          /* *** UPDATED: Use new checksum validation *** */
+          if (meteo_validate_checksum(rxBuffer))
+          {
+            printf("[METEO] Checksum OK\n");
+            
+            // Process frame: display and store
+            ProcessMeteoFrame(rxBuffer);           // Display on console
+            // 9.2.26- For now comment out - should be queued
+            // ProcessMeteoFrameToStream(rxBuffer);   // Store in ITTIA DB stream
+          }
+          else
+          {
+            printf("[METEO] Err: Checksum validation failed\n");
+            
+            // DEBUG: Show calculated vs received checksum
+            uint16_t calc_chksum = meteo_calculate_checksum(rxBuffer);
+            printf("  Calculated checksum: 0x%04X\n", calc_chksum);
+          }
+
+          frameInProgress = 0;
+          rxIndex = 0;
+        }
+      }
+      else
+      {
+        /* Buffer overflow */
+        printf("[METEO] Buffer overflow - frame dropped\n");
+        frameInProgress = 0;
+        rxIndex = 0;
+      }
+    }
+
+    /* Restart reception */
+    HAL_UART_Receive_IT(&huart3, &rxByte, 1);
   }
 }
 
@@ -469,13 +478,9 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 }
 
 
-
 /**
- * @brief  Parse the meteo frame and display values
+ * @brief  Parse the meteo frame and display values - 8.2.26
  * @param  frame: null-terminated string starting with "UUU$" ... "*QQQ"
- *
- * NOTE: This function is unchanged - it still displays data as before.
- * The new ProcessMeteoFrameToStream() function handles ITTIA DB storage.
  */
 void ProcessMeteoFrame(const char* frame)
 {
@@ -483,63 +488,40 @@ void ProcessMeteoFrame(const char* frame)
   uint32_t temp_adc = 0, baro_adc = 0, wdir = 0, wspeed = 0, volt = 0;
   uint16_t crcc = 0;
 
-  // Example parsing - adjust format exactly to your frame
   // Format: UUU$ttttt.bbbbb.dddd.sssss.vvv.CRCC*QQQ
-  if (sscanf(frame, "UUU$%5u.%5u.%4u.%5u.%3u.%*[^.].%hu",
+  // Parse: skip the CRCC field in scanf
+  if (sscanf(frame, "UUU$%5u.%5u.%4u.%5u.%3u.%4hx",
              &temp_adc, &baro_adc, &wdir, &wspeed, &volt, &crcc) >= 5)
   {
-    // Display on VCP
-    printf("[TS %lu] Temp ADC: %05u | Baro ADC: %05u | WDir: %u (%u.%u deg) | WSpeed: %u | V: %u | CRCC: %hu\r\n",
-           ts, temp_adc, baro_adc, wdir, wdir/10, wdir%10, wspeed, volt, crcc);
-
-    // Display on LCD (simple text update - you can improve layout)
-    char line[64];
+    // Convert to engineering units
+    float temp_c = temp_adc * 0.01f;        // e.g., 08030 → 80.30°C
+    float pressure_hpa = baro_adc * 0.1f;   // e.g., 00327 → 32.7 hPa
+    
+    // Display on console
+    printf("[TS %lu] T=%.2f degC P=%.1fhPa WDir=%u.%u deg WSpeed=%u V=%umV CRC=0x%04X\r\n",
+           ts, temp_c, pressure_hpa, wdir/10, wdir%10, wspeed, volt, crcc);
 
     #ifdef NEW_LCD
-    BSP_LCD_Clear(LCD_COLOR_BLACK);
-
-    sprintf(line, "TS: %lu ms", ts);
-    BSP_LCD_DisplayStringAt(10, 40, (uint8_t*)line, LEFT_MODE);
-
-    sprintf(line, "Temp ADC: %05u", temp_adc);
-    BSP_LCD_DisplayStringAt(10, 70, (uint8_t*)line, LEFT_MODE);
-
-    sprintf(line, "Baro ADC: %05u", baro_adc);
-    BSP_LCD_DisplayStringAt(10, 100, (uint8_t*)line, LEFT_MODE);
-
-    sprintf(line, "Wind Dir: %u.%u deg", wdir/10, wdir%10);
-    BSP_LCD_DisplayStringAt(10, 130, (uint8_t*)line, LEFT_MODE);
-
-    sprintf(line, "Wind Speed: %u", wspeed);
-    BSP_LCD_DisplayStringAt(10, 160, (uint8_t*)line, LEFT_MODE);
+    // LCD display code here if needed
     #endif
-    // Instead, after parsing success, add simple visual feedback (e.g. green rectangle)
-    BSP_LCD_FillRect(0, 200, 200, 40, 40, 0xFF00FF00UL);  // green square = good frame
   }
   else
   {
-    printf("Parse failed: %s\r\n", frame);
-    #ifdef NEW_LCD
-    BSP_LCD_DisplayStringAt(10, 200, (uint8_t*)"Parse ERROR", LEFT_MODE);
-    #endif
-    // In checksum error:
-    BSP_LCD_FillRect(0, 180, 10, 100, 20, 0xFFFF0000UL);  // red bar = error
+    printf("[METEO] Parse failed: %s\r\n", frame);
   }
 }
 
-/**
- * @brief  Implement your CRCC checksum validation
- *         Replace this placeholder with your actual algorithm
- * @return 1 = valid, 0 = invalid
- */
+// *** REMOVED OLD ChecksumValidate() FUNCTION ***
+// 8.2.26 Now using meteo_validate_checksum() from meteo_checksum.c
+
+/* Replaced old function 8-2-26
 int ChecksumValidate(const char* frame)
 {
   // Find position before *QQQ
   const char* end = strstr(frame, "*QQQ");
   if (!end) return 0;
 
-  // Example: simple 8-bit sum of all chars from UUU$ to before CRCC field
-  // ADJUST THIS TO MATCH YOUR METEO MODULE'S ACTUAL CHECKSUM METHOD
+  // simple 8-bit sum of all chars from UUU$ to before CRCC field
   uint8_t calc = 0;
   const char* p = frame;
   while (p < end)
@@ -555,6 +537,7 @@ int ChecksumValidate(const char* frame)
 
   return (calc == (reported & 0xFF));   // example - change comparison
 }
+*/
 
 // 14.1.26 To avoid Linker Error
 int _gettimeofday(struct timeval *tv, void *tzvp)
