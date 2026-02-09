@@ -463,17 +463,25 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   }
 }
 
-/* UART3 error callback (clear framing errors) */
+/* UART3 error callback (clear framing errors)
+*  Modified 9.2.26 to avoid printing normal conditions */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART3)
   {
-    uint32_t isr = READ_REG(huart->Instance->ISR);
-    printf("[UART ERR: ISR=0x%08lX]\r\n", isr);
-    __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF | UART_CLEAR_FEF | UART_CLEAR_NEF);
+	  uint32_t isr = READ_REG(huart->Instance->ISR);
 
-    // Restart reception on error
-    HAL_UART_Receive_IT(&huart3, &rxByte, 1);
+	      // 9.2.26 Only print actual errors, not normal idle/timeout flags
+	      if (isr & (UART_FLAG_PE | UART_FLAG_FE | UART_FLAG_NE | UART_FLAG_ORE))
+	      {
+	          printf("[UART ERR: ISR=0x%08lX]\r\n", isr);
+	      }
+
+	      __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_OREF | UART_CLEAR_FEF |
+	                            UART_CLEAR_NEF | UART_CLEAR_IDLEF | UART_CLEAR_RTOF);
+
+	      // Restart reception
+	      HAL_UART_Receive_IT(&huart3, &rxByte, 1);
   }
 }
 
@@ -498,7 +506,7 @@ void ProcessMeteoFrame(const char* frame)
     float pressure_hpa = baro_adc * 0.1f;   // e.g., 00327 → 32.7 hPa
     
     // Display on console
-    printf("[TS %lu] T=%.2f degC P=%.1fhPa WDir=%u.%u deg WSpeed=%u V=%umV CRC=0x%04X\r\n",
+    printf("[TS %lu] T=%.2f [degC] P=%.1f [hPa] WDir=%u.%u [deg] WSpeed=%u [m/s] V=%u mV CRC=0x%04X\r\n",
            ts, temp_c, pressure_hpa, wdir/10, wdir%10, wspeed, volt, crcc);
 
     #ifdef NEW_LCD
