@@ -292,5 +292,17 @@ void ETH_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+/* USER CODE BEGIN 1 */
+
+/** Added 9.2.26 For button
+ * @brief EXTI Line13 interrupt handler (USER button)
+ */
+void EXTI13_IRQHandler(void)
+{
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_13);
+}
+
+/* USER CODE END 1 */
+
 
 /* USER CODE END 1 */

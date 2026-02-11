@@ -450,6 +450,20 @@ void MX_GPIO_Init(void)
   /* Addede 3.2.26 EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI14_IRQn, 6, 0);
   HAL_NVIC_EnableIRQ(EXTI14_IRQn);
+
+  /* 9.2.26 Configure USER Button (PC13) as input with interrupt - don't work */
+  #ifdef USE_BSP_BUTTON
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;  // Falling edge (button press)
+  GPIO_InitStruct.Pull = GPIO_NOPULL;           // External pull-up on board
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /* Enable and set EXTI13 interrupt priority */
+  HAL_NVIC_SetPriority(EXTI13_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI13_IRQn);
+  #endif
+
+
 }
 
 /* USER CODE BEGIN 2 */

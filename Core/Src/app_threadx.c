@@ -36,6 +36,9 @@
 #include "db_netxduo_tcp.h"
 #include "app_netxduo.h"  // Your NetX Duo configuration
 
+//10.2.26 Simulator
+#include "meteo_simulator.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -167,10 +170,15 @@ void tx_app_thread_entry(ULONG thread_input)
   /* USER CODE BEGIN tx_app_thread_entry */
   // 2.2.26 MX_ITTIA_Init() should go in main, before ThreadX
   // printf("\n=== METEO Weather Station with ITTIA DB ===\n");
+  printf("\n=== METEO Weather Station - Starting Services ===\n");
 
-  // *** NEW: Initialize ITTIA DB ***
-  // printf("Initializing ITTIA DB...\n");
-  // MX_ITTIA_Init();
+  tx_thread_sleep(200);
+
+
+  // 9.2.26 NEW: Initialize MeteoSimulator thread (internal message if fails)
+  meteo_simulator_init();
+
+  printf("Services started - press 'S' to toggle simulator\n");
 
   // *** NEW: Initialize OSPI driver for database storage ***
   driver_info.hspi = hospi1;
@@ -193,11 +201,12 @@ void tx_app_thread_entry(ULONG thread_input)
 
   printf("=== METEO system ready - Waiting for UART3 data ===\n");
 
-  // *** Main thread now just sleeps - UART ISR handles data ***
-  while (1)
-  {
-    tx_thread_sleep(1000);  // Sleep 1 second
-  }
+  // *** Main thread entering - UART ISR handles data ***
+  // No while loop here.. 10/2/26
+  //while (1)
+  //{
+  tx_thread_sleep(1000);  // Sleep 1 second
+  //}
 
   /* USER CODE END tx_app_thread_entry */
 }

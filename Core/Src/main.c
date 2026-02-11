@@ -48,7 +48,13 @@
 #include "meteo_example.h"
 
 // 8.2.26 New checksum validation - Based on old CL2 (2014) -8-bit meteo.c/.h
-#include "meteo_checksum.h"  
+#include "meteo_checksum.h" 
+
+// 9.2.26 Added METEO Simulator in file meteo_simulator.c, USER button 
+// changes from UART3 to Simulator data. USER button already in BSP package
+#include "stm32h573i_discovery.h"
+#include "meteo_simulator.h"
+
 
 /* USER CODE END Includes */
 
@@ -188,6 +194,20 @@ int main(void)
   // eliminate Task creation here, move to app_threadx.c (Claude 27.1.26)
 
   printf("\n=== METEO Weather Station with ITTIA DB ===\n");
+  //10.2.26 Add VCP control
+  printf("Console Control: Press 'S' to toggle simulator\n");
+
+  // Added 9.2.26 to toggle Simulator - don't work
+#ifdef USE_BSP_BUTTON
+  // Initialize USER button (blue button on board)
+  BSP_PB_Init(BUTTON_USER, BUTTON_MODE_EXTI);
+  // Override the default priority (24 is too low!)
+  HAL_NVIC_SetPriority(EXTI13_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI13_IRQn);
+
+  printf("USER button initialized (priority 5)\n");
+  printf("USER button initialized - Press to toggle simulator\n");
+#endif
 
   // *** NEW: Initialize ITTIA DB ***
   printf("Initializing ITTIA DB...\n");
@@ -558,10 +578,25 @@ int _gettimeofday(struct timeval *tv, void *tzvp)
 }
 
 
-// End added functions
-
 
 /* USER CODE END 4 */
+
+// Add 9.2.26 - USER BUTTON BSP Callback - don't work
+#ifdef USE_BSP_BUTTON
+/**
+ * @brief GPIO EXTI callback - handles USER button press
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	printf("\n[BUTTON] Callback triggered!");
+    if (GPIO_Pin == GPIO_PIN_13)  // USER button (blue button on board)
+    {
+        // Toggle METEO simulator
+    	printf("\nSimulator Toggled");
+        meteo_simulator_toggle();
+    }
+}
+#endif
 
 /**
   * @brief  Period elapsed callback in non blocking mode
