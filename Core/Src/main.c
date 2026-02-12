@@ -15,6 +15,12 @@
   *
   ******************************************************************************
   */
+
+  /* Revisions
+   *  11.2.26 a) Uncomment - still not queued
+      Line 462      ProcessMeteoFrameToStream(rxBuffer); // Store in ITTIA DB stream
+
+   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "app_threadx.h"
@@ -453,8 +459,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             
             // Process frame: display and store
             ProcessMeteoFrame(rxBuffer);           // Display on console
-            // 9.2.26- For now comment out - should be queued
-            // ProcessMeteoFrameToStream(rxBuffer);   // Store in ITTIA DB stream
+            // 11.2.26- Uncomment - still not queued
+            ProcessMeteoFrameToStream(rxBuffer);   // Store in ITTIA DB stream 11.2.26
           }
           else
           {

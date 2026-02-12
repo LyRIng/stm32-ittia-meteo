@@ -2,7 +2,7 @@
 /**
   ******************************************************************************
   * @file    app_threadx.c
-  * @author  MCD Application Team
+  * @author  MCD Application Team / R.Oliva
   * @brief   ThreadX applicative file
   ******************************************************************************
     * @attention
@@ -13,6 +13,7 @@
   * This software is licensed under terms that can be found in the LICENSE file
   * in the root directory of this software component.
   * If no LICENSE file comes with this software, it is provided AS-IS.
+  * Version updated for IDC_ENABLED 11.2.26
   *
   ******************************************************************************
   */
@@ -54,7 +55,7 @@
 /* USER CODE END Before_Kernel_Start */
 
 // *** NEW: Configuration ***
-#define METEO_IDC_ENABLED  0  // Set to 0 to disable Analitica sync - testing 2/2
+#define METEO_IDC_ENABLED  0  // Set to 1 to enable Analitica sync - testing 11/2
 
 /* USER CODE END PD */
 
@@ -171,7 +172,8 @@ void tx_app_thread_entry(ULONG thread_input)
   // 2.2.26 MX_ITTIA_Init() should go in main, before ThreadX
   // printf("\n=== METEO Weather Station with ITTIA DB ===\n");
   printf("\n=== METEO Weather Station - Starting Services ===\n");
-
+  
+  printf("Waiting for network initialization...\n");
   tx_thread_sleep(200);
 
 
@@ -199,13 +201,21 @@ void tx_app_thread_entry(ULONG thread_input)
     Error_Handler();
   }
 
-  printf("=== METEO system ready - Waiting for UART3 data ===\n");
+  printf("=== METEO system ready ===\n");  // update menu 11.2.26
+  printf("  - Real sensor: Connect METEO to UART3\n");
+  printf("  - Simulator: Press 'S' to toggle\n");
+  
+  #if METEO_IDC_ENABLED
+    printf("  - Analitica: IDC agent running in background\n");
+  #else
+    printf("  - Analitica: Disabled (set METEO_IDC_ENABLED=1)\n");
+  #endif
 
   // *** Main thread entering - UART ISR handles data ***
   // No while loop here.. 10/2/26
   //while (1)
   //{
-  tx_thread_sleep(1000);  // Sleep 1 second
+  //tx_thread_sleep(1000);  // Sleep 1 second
   //}
 
   /* USER CODE END tx_app_thread_entry */

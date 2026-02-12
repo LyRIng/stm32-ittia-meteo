@@ -48,7 +48,8 @@ int meteo_example_init(db_media_driver_t driver, void * driver_info)
 /**
  * @brief Run METEO example - setup streams and wait for UART data
  * This function initializes the stream graph and then returns,
- * allowing the UART ISR to feed data into the stream.
+ * allowing the UART ISR to feed data into the stream - Upd 11-02-26
+ * Avoid blocking sections.
  */
 int run_meteo_example(db_media_driver_t driver, void * driver_info)
 {
@@ -74,22 +75,25 @@ int run_meteo_example(db_media_driver_t driver, void * driver_info)
         return EXIT_FAILURE;
     }
 
-    /* Wait for instance ID to be assigned by IDC agent */
+    /* Wait for instance ID to be assigned by IDC agent - removed blocking 11.02.26
     while (NULL == meteo_instance_id || *meteo_instance_id == 0) {
         os_sleep(WAIT_MILLISEC(100));
-    }
+    } */ 
+	/* The IDC agent will set instance_id when it connects */
+	/*  printf("METEO example ready - instance_id: %d\n", *meteo_instance_id); */
+    /* UART callbacks can start inserting data immediately */
+    
+    printf("METEO stream ready - UART3 callbacks will insert data\n");
 
-    printf("METEO example ready - instance_id: %d\n", *meteo_instance_id);
-    printf("Waiting for UART3 meteorological data...\n");
-
-    /* Keep the stream graph alive - UART ISR will feed data */
-    while (1) {
+    /* Avoid blocking  */
+    /* while (1) {
         os_sleep(WAIT_MILLISEC(1000));
         // Main loop - UART callbacks handle data insertion
-    }
+    }*/
 
     // Cleanup (never reached in this implementation)
-    db_stream_free_graph(graph, NULL);
+    /* db_stream_free_graph(graph, NULL); */ 
+	/* let other threads run */
     return EXIT_SUCCESS;
 }
 
@@ -97,21 +101,21 @@ int run_meteo_example(db_media_driver_t driver, void * driver_info)
  * @brief Process a complete METEO frame from UART3
  * This function is called from your UART callback in main.c
  * 
- * Frame format: UUU$ttttt.bbbbb.dddd.sssss.vvv.CRCC*QQQ
+ * Frame format: UUU$ttttt.bbbbb.dddd.sssss.vvv.CHKS*QQQ
  * - ttttt: Temperature ADC (5 digits)
  * - bbbbb: Barometric pressure ADC (5 digits)  
  * - dddd:  Wind direction in 0.1 degrees (4 digits)
  * - sssss: Wind speed (5 digits)
  * - vvv:   Voltage (3 digits)
- * - CRCC:  Checksum
+ * - CHKS:  Checksum
  */
 void ProcessMeteoFrameToStream(const char* frame)
 {
     uint32_t temp_adc = 0, baro_adc = 0, wdir = 0, wspeed = 0, volt = 0;
     uint16_t crcc = 0;
     
-    /* Parse the METEO frame */
-    if (sscanf(frame, "UUU$%5u.%5u.%4u.%5u.%3u.%*[^.].%hu",
+    /* Parse the METEO frame - upd 11.02.26 */
+    if (sscanf(frame, "UUU$%5u.%5u.%4u.%5u.%3u.%4hx",
                &temp_adc, &baro_adc, &wdir, &wspeed, &volt, &crcc) >= 5)
     {
         /* Create timestamp in microseconds */
@@ -120,13 +124,19 @@ void ProcessMeteoFrameToStream(const char* frame)
         
         /* Convert ADC values to engineering units */
         // TODO: Adjust these conversion factors based on your sensor calibration
+        double pressure = baro_adc / 10.0;            // 00327 -> 32.7 hPa
         double temperature = temp_adc / 100.0;        // Example: ADC to °C
         double wind_speed = wspeed / 10.0;            // Example: to m/s
         double wind_direction = wdir / 10.0;          // Already in degrees (0.1° resolution)
         
-        /* Create meteo reading */
+         /* *** 11.2.26 SAFETY: Use default ID if IDC agent hasn't connected yet *** */
+        int32_t instance_id = (meteo_instance_id != NULL && *meteo_instance_id > 0) 
+                              ? *meteo_instance_id 
+                              : 1;  // Default instance ID       
+		
+		/* Create meteo reading - modified id 11.2.26 */
         meteo_readings_row_t meteo = {
-            .id = (meteo_instance_id != NULL) ? *meteo_instance_id : 1,
+            .id = instance_id,
             .ts = timestamp,
             .temperature = temperature,
             .wind_speed = wind_speed,
@@ -141,8 +151,9 @@ void ProcessMeteoFrameToStream(const char* frame)
                 "Cannot process METEO stream input: %s\n",
                 dbs_get_error_info(status).description);
         } else {
-            printf("[METEO] T:%.2f°C, WS:%.1fm/s, WD:%.1f°, V:%u\n",
-                   temperature, wind_speed, wind_direction, volt);
+            /* 11.2.26 Optional: Reduced logging to avoid spam */
+            printf("[DB] Stored: T=%.2f degC P=%.1f hPa WS=%.1f m/s WD=%.1f deg V=%u\n",
+                   temperature, pressure, wind_speed, wind_direction, volt);
         }
     }
     else {
