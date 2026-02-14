@@ -35,6 +35,9 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+// 13.2.26 Added for TX_QUEUE, UCHAR types
+#include "tx_api.h"
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -208,8 +211,20 @@ void Error_Handler(void);
 #define UCPD_CC1_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+// Added 13.2.26 - Uniform BUFFER - Queue sizes defined here
+// Try 2 - increment storage size of queue by 256
+#define RX_BUFFER_SIZE  128
+#define METEO_QUEUE_SIZE  10
+#define METEO_QUEUE_STORAGE_SIZE  (METEO_QUEUE_SIZE * RX_BUFFER_SIZE + 256)
 
 /* USER CODE END Private defines */
+
+/* USER CODE BEGIN Prototypes */
+
+extern TX_QUEUE meteo_frame_queue;
+extern UCHAR meteo_queue_storage[METEO_QUEUE_STORAGE_SIZE];
+
+/* USER CODE END Prototypes */
 
 #ifdef __cplusplus
 }

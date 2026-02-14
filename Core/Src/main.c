@@ -19,6 +19,7 @@
   /* Revisions
    *  11.2.26 a) Uncomment - still not queued
       Line 462      ProcessMeteoFrameToStream(rxBuffer); // Store in ITTIA DB stream
+	  12.2.26 b) Add Queue to store ISR Data from UART3-METEO, insert in Callback
 
    */
 /* USER CODE END Header */
@@ -72,7 +73,9 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 /* Private defines 13-01-26 */
-#define RX_BUFFER_SIZE          128
+// RX_BUFF_SIZE 100 Sent to main.h 13.2.26
+// #define RX_BUFFER_SIZE          128
+
 #define FRAME_START             "UUU$"
 #define FRAME_END               "*QQQ"
 #define MAX_FRAME_LEN           80
@@ -112,6 +115,11 @@ TX_THREAD meteo_thread;
 //#define METEO_THREAD_STACK_SIZE   2048   // This is fine 2/2/26
 UCHAR meteo_thread_stack[2048];  // Small stack for minimal thread
 // uint8_t meteo_thread_stack[1024]; not ThreadX Native type
+
+/* 13-2-26 See Redefined Sizes in main.h for
+ * METEO frame queue for passing data from ISR to thread */
+TX_QUEUE meteo_frame_queue;
+UCHAR meteo_queue_storage[METEO_QUEUE_STORAGE_SIZE];
 
 /* USER CODE END PV */
 
@@ -407,6 +415,8 @@ void Meteo_Thread_Entry(ULONG thread_input)
 // 27.1.26 20:16Hs
 // Frame correction 8-2-26 with 16-bit checksum
 /* UART3 RX complete callback (called on each byte) */
+// 13.2.26 Add queue to Receive Data from UART3
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART3)
@@ -449,26 +459,26 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         {
           rxBuffer[rxIndex] = '\0';
 
-          /* Frame complete - print it */
+          /* Frame complete */
           printf("\n[METEO Frame] (%d bytes): %s\r\n", rxIndex, rxBuffer);
 
-          /* *** UPDATED: Use new checksum validation *** */
           if (meteo_validate_checksum(rxBuffer))
           {
             printf("[METEO] Checksum OK\n");
             
-            // Process frame: display and store
-            ProcessMeteoFrame(rxBuffer);           // Display on console
-            // 11.2.26- Uncomment - still not queued
-            ProcessMeteoFrameToStream(rxBuffer);   // Store in ITTIA DB stream 11.2.26
+            // Display immediately (safe in ISR)
+            ProcessMeteoFrame(rxBuffer);
+            
+            // 13.2.26 Post to queue for database storage (thread context) ***
+            extern TX_QUEUE meteo_frame_queue;
+            if (tx_queue_send(&meteo_frame_queue, rxBuffer, TX_NO_WAIT) != TX_SUCCESS)
+            {
+                printf("[METEO] Queue full - frame dropped\n");
+            }
           }
           else
           {
-            printf("[METEO] Err: Checksum validation failed\n");
-            
-            // DEBUG: Show calculated vs received checksum
-            uint16_t calc_chksum = meteo_calculate_checksum(rxBuffer);
-            printf("  Calculated checksum: 0x%04X\n", calc_chksum);
+            printf("[METEO] Checksum validation failed\n");
           }
 
           frameInProgress = 0;

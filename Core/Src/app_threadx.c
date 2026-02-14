@@ -40,6 +40,10 @@
 //10.2.26 Simulator
 #include "meteo_simulator.h"
 
+// 13.2.26 Include Buffer Sizes in main.h for queues
+// --> for METEO_QUEUE_STORAGE_SIZE
+#include "main.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,6 +76,10 @@ TX_THREAD tx_app_thread;
 static ittia_media_ospi_info_t driver_info;
 extern XSPI_HandleTypeDef hospi1;  // From CubeMX
 
+/* *** 12.2.26 added METEO database processing thread *** */
+TX_THREAD meteo_db_thread;
+UCHAR meteo_db_thread_stack[2048];
+
 // *** NEW: IDC agent thread (if enabled) ***
 #if METEO_IDC_ENABLED
 TX_THREAD idc_agent_thread;
@@ -87,6 +95,9 @@ extern TX_SEMAPHORE DHCPSemaphore;       // Your DHCP semaphore
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
+
+/* *** 12.2.26: Database processing thread (See end of file) *** */
+static void meteo_db_thread_entry(ULONG thread_input);
 
 #if METEO_IDC_ENABLED
 static void idc_agent_thread_entry(ULONG thread_input);
@@ -107,9 +118,50 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   /* USER CODE BEGIN App_ThreadX_MEM_POOL */
 
   /* USER CODE END App_ThreadX_MEM_POOL */
-  /* In app_threadx.c, around line 70 - Claude suggested 27.1.26 */
+  
+  
   /* USER CODE BEGIN App_ThreadX_Init */
 
+  /* *** 12-02-26 Create METEO frame queue (before threads) *** */
+  /* Queue and storage global in main.c                         */
+  extern TX_QUEUE meteo_frame_queue;
+  extern UCHAR meteo_queue_storage[];
+  
+  // Diagnostic - 13.2.26 before queue creation
+  printf("=== Queue Debug Info ===\n");
+  printf("  sizeof(ULONG): %d\n", sizeof(ULONG));
+  printf("  RX_BUFFER_SIZE: %d\n", RX_BUFFER_SIZE);
+  printf("  Message size calculation: %d / %d = %d\n",
+         RX_BUFFER_SIZE, sizeof(ULONG), RX_BUFFER_SIZE / sizeof(ULONG));
+
+  // Check if message size is valid
+  if ((RX_BUFFER_SIZE % sizeof(ULONG)) != 0)
+  {
+    printf("WARNING: RX_BUFFER_SIZE not aligned to ULONG!\n");
+  }
+
+  // Verify storage
+  printf("  Required storage: %d messages * %d bytes = %d\n",
+         METEO_QUEUE_SIZE, RX_BUFFER_SIZE, METEO_QUEUE_SIZE * RX_BUFFER_SIZE);
+  printf("  Allocated storage: %d\n", METEO_QUEUE_STORAGE_SIZE);
+
+  if (METEO_QUEUE_STORAGE_SIZE < (METEO_QUEUE_SIZE * RX_BUFFER_SIZE))
+  {
+    printf("ERROR: Storage too small!\n");
+  }
+
+  // 13.2.26 - use QUEUE size defined in main.h
+  if (tx_queue_create(&meteo_frame_queue,
+                      "METEO Frame Queue",
+					  RX_BUFFER_SIZE / sizeof(ULONG),  // Message size in ULONGs 13.2.26
+                      meteo_queue_storage,
+					  METEO_QUEUE_STORAGE_SIZE) != TX_SUCCESS)
+  {
+    printf("ERROR: Failed to create METEO frame queue\n");
+    return TX_QUEUE_ERROR;
+  }
+  
+  
   /* Declare thread and stack as static or extern */
   extern TX_THREAD meteo_thread;
   // recommended 27.1. use UCHAR instead of uint8_t
@@ -126,9 +178,29 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   {
     return TX_THREAD_ERROR;
   }
+  
+  /* *** 12.02.26 NEW: Create METEO database processing thread *** */
+  extern TX_THREAD meteo_db_thread;
+  extern UCHAR meteo_db_thread_stack[];
+  
+  if (tx_thread_create(&meteo_db_thread,
+                       "METEO DB Thread",
+                       meteo_db_thread_entry,
+                       0,
+                       meteo_db_thread_stack,
+                       sizeof(meteo_db_thread_stack),
+                       15,  // Priority
+                       15,
+                       TX_NO_TIME_SLICE,
+                       TX_AUTO_START) != TX_SUCCESS)
+  {
+    printf("[WARNING] METEO DB thread creation failed\n");
+    // Continue anyway
+  }
+  
 
 #if METEO_IDC_ENABLED
-  // *** NEW: Create IDC agent thread for Analitica synchronization ***
+  // *** Create IDC agent thread for Analitica synchronization ***
   if (tx_thread_create(&idc_agent_thread, "IDC Agent", idc_agent_thread_entry, 0,
                        idc_agent_thread_stack, sizeof(idc_agent_thread_stack),
                        16, 16, TX_NO_TIME_SLICE, TX_AUTO_START) != TX_SUCCESS)
@@ -304,5 +376,27 @@ void MX_ThreadX_Init(void)
 }
 
 /* USER CODE BEGIN 1 */
+/**
+ * @brief METEO database processing thread 13.2.26
+ * Receives frames from UART ISR queue and stores in database
+ */
+static void meteo_db_thread_entry(ULONG thread_input)
+{
+    (void)thread_input;
+    char frame_buffer[RX_BUFFER_SIZE];  // 13.2.26 RX_BUFFER_SIZE from main.H
+    extern TX_QUEUE meteo_frame_queue;
+    
+    printf("[DB Thread] Started - waiting for METEO frames\n");
+    
+    while(1)
+    {
+        // Wait for frame from queue (blocks until available)
+        if (tx_queue_receive(&meteo_frame_queue, frame_buffer, TX_WAIT_FOREVER) == TX_SUCCESS)
+        {
+            // Now safe to call ITTIA DB functions (thread context!)
+            ProcessMeteoFrameToStream(frame_buffer);
+        }
+    }
+}
 
 /* USER CODE END 1 */
