@@ -212,8 +212,9 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN Private defines */
 // Added 13.2.26 - Uniform BUFFER - Queue sizes defined here
-// Try 2 - increment storage size of queue by 256
-#define RX_BUFFER_SIZE  128
+// Try 2 - increment storage size of queue by 256 - DON'T WORK
+// Try 3 - Reduce RX_BUFFER SIZE TO 64 , MIGHT BE TOO SMALL
+#define RX_BUFFER_SIZE  64
 #define METEO_QUEUE_SIZE  10
 #define METEO_QUEUE_STORAGE_SIZE  (METEO_QUEUE_SIZE * RX_BUFFER_SIZE + 256)
 
