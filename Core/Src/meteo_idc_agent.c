@@ -1,7 +1,8 @@
 /**************************************************************************/
 /*                                                                        */
-/*      METEO IDC Agent - ITTIA Data Connect for Analitica sync          */
-/*      Synchronizes METEO data to Ubuntu VM via TCP/Ethernet            */
+/*      METEO IDC Agent - ITTIA Data Connect for Analitica sync           */
+/*      Synchronizes METEO data to Ubuntu VM via TCP/Ethernet             */
+/*      Rev. 17.2.26 - Added Debug info - connection errors               */
 /*                                                                        */
 /**************************************************************************/
 
@@ -17,6 +18,12 @@
 #include <ittia/db/db_stream.h>
 /* ITTIA Data Connect agent */
 #include <ittia/idc/idc_agent.h>
+// 17.2.26 - Add Error information headers
+#include <ittia/db/db_error.h>
+#include "dbs_error_info.h"
+// Pre-Flight schecks 17.2.26
+#include "db_netxduo_tcp.h"     // For db_netxduo_tcp_options_t
+#include "nx_api.h"             // For nx_ip_address_get(), NX_SUCCESS
 
 #define kMeteoDataModelName "meteo_weather_station"
 
@@ -59,6 +66,70 @@ static idc_data_model_instance_t meteo_instance = {
 int run_meteo_idc_agent(const char * proto_name, void * proto_param)
 {
     meteo_instance_id = &meteo_instance.instance_id;
+	
+    printf("\n=== PRE-FLIGHT CHECKS ===\n"); // Added 17.2.26
+	printf("1.IDC Agent: meteo_stream_env = 0x%p\n", meteo_stream_env);  // Added 17.2.26
+
+    /* Check stream env is initialized */
+    if (meteo_stream_env == NULL)
+    {
+        printf("ERROR: meteo_stream_env is NULL! Streams not initialized yet.\n");
+        printf("Waiting for streams to initialize...\n");
+        
+        /* Wait for stream env to be initialized */
+        while (meteo_stream_env == NULL)
+        {
+            os_sleep(WAIT_MILLISEC(500));
+        }
+        printf("Stream env ready: 0x%p\n", meteo_stream_env);
+    }
+
+    /* Check 2: Relations */
+     const size_t relation_count = DB_ARRAY_DIM(meteo_relation_array);
+     printf("2. Relation count: %zu\n", relation_count);
+     if (relation_count == 0) {
+         printf("   ERROR: No relations defined!\n");
+         return EXIT_FAILURE;
+     }
+     printf("   OK: %zu relation(s) defined\n", relation_count);
+
+     /* Check 3: Instance */
+     printf("3. Data model instance:\n");
+     printf("   - ID: %ld\n", (long)meteo_instance.instance_id);  // ← Use %ld for int32_t
+     printf("   - Model: %s\n", meteo_instance.data_model_name);
+
+
+     /* Check 4: Protocol parameters */
+     printf("4. Protocol: %s\n", proto_name);
+     if (proto_param == NULL) {
+         printf("   ERROR: proto_param is NULL!\n");
+         return EXIT_FAILURE;
+     }
+
+     db_netxduo_tcp_options_t* opts = (db_netxduo_tcp_options_t*)proto_param;
+     printf("   - Port: %d\n", (int)opts->netxduo_tcp_port);
+     printf("   - Packet pool: 0x%p\n", (void*)opts->netxduo_packet_pool);
+     printf("   - IP instance: 0x%p\n", (void*)opts->netxduo_tcp_interface);
+
+     /* Check 5: Network is ready */
+     ULONG ip_address, network_mask;
+     if (nx_ip_address_get(opts->netxduo_tcp_interface, &ip_address, &network_mask) == NX_SUCCESS) {
+         printf("5. Network status:\n");
+         printf("   - IP: %lu.%lu.%lu.%lu\n",
+                (ip_address >> 24) & 0xFF,
+                (ip_address >> 16) & 0xFF,
+                (ip_address >> 8) & 0xFF,
+                ip_address & 0xFF);
+         printf("   OK: Network ready\n");
+     } else {
+         printf("5. Network status: ERROR - No IP address!\n");
+         return EXIT_FAILURE;
+     }
+
+    printf("=========================\n\n");
+
+
+
 
     printf("Starting METEO IDC agent...\n");
     printf("Protocol: %s\n", proto_name);
@@ -68,6 +139,8 @@ int run_meteo_idc_agent(const char * proto_name, void * proto_param)
     {
         const size_t relation_count = DB_ARRAY_DIM(meteo_relation_array);
         dbstatus_t status;
+		
+		printf("IDC: Calling idc_run_agent()...\n"); // Debug 17.2.26
 
         /* Run the IDC agent - this blocks until connection is lost */
         status = idc_run_agent(
@@ -79,12 +152,34 @@ int run_meteo_idc_agent(const char * proto_name, void * proto_param)
             proto_name,
             proto_param);
 
-        if (DB_FAILED(status)) {
-            printf("IDC agent error: %d - Retrying in 5 seconds...\n", status);
-            os_sleep(WAIT_MILLISEC(5000));
+   	    /* Get err info - Added debug information - status 17.2.26 */
+   	    dbs_error_info_t err_info = dbs_get_error_info(status); // get result
+        printf("\n=== IDC AGENT RETURNED ===\n");
+        printf("Status: %d (0x%X)\n", status, (unsigned int)status);
+        printf("Name: %s\n", err_info.name);
+        printf("Description: %s\n", err_info.description);
+
+        if (DB_FAILED(status)) {   // Added debug information - status 17.2.26
+
+             printf("Fail: IDC agent error: %d (0x%X) %s \n",
+                   status, (unsigned int)status, err_info.description);
+            
+            /* Decode error -57 */
+            if (status == -57) {
+                printf(" Error -57: DB_ECONNREFUSED\n");
+                printf("- Socket not connected: IDC couldn't create/bind socket\n");
+                printf("- Check: DB_NETXDUO_TCP_REGISTER() was called\n");
+                printf("- Check: Network stack is fully initialized\n");
+                printf("- Check: Port 5555 not already in use\n");
+            }
+            else if (status == -318) {
+                printf("  Error: DB_EIPCCONNECT - Connection dropped\n");
+            }
+            printf("  Retrying in 5 seconds...\n");
+	        os_sleep(WAIT_MILLISEC(5000));
         }
         else {
-            printf("IDC agent stopped - Reconnecting...\n");
+            printf("IDC agent stopped (status=%d) - Reconnecting in 1s...\n", status);
             os_sleep(WAIT_MILLISEC(1000));
         }
     }

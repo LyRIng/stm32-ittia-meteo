@@ -2,8 +2,9 @@
 /**
   ******************************************************************************
   * @file    app_netxduo.h
-  * @author  MCD Application Team
-  * @brief   NetXDuo applicative header file
+  * @author  MCD Application Team / R.Oliva
+  * @brief   NetXDuo applicative header file, for new app_netxduo.c 16.2.26
+  *          Uses ITTIA-DBlite STM32H573 v9.1 Examples structure
   ******************************************************************************
     * @attention
   *
@@ -67,6 +68,17 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 
 /* Private defines -----------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+/* Updated for new app_netxduo.c - 16.2.26 */
+
+#define DEFAULT_MEMORY_SIZE                   1024
+#define DEFAULT_PRIORITY                      10
+#define WINDOW_SIZE                           512
+#define LINK_PRIORITY                         11
+#define NULL_ADDRESS                          0
+#define DEFAULT_PORT                          5555  // Former 16534, DBlite usage
+#define MAX_TCP_CLIENTS                       1
+#define NX_APP_CABLE_CONNECTION_CHECK_PERIOD  (1 * NX_IP_PERIODIC_RATE)
+#define APP_TCP_THREAD_STACK_SIZE             12 * 1024
 
 /* USER CODE END PD */
 
@@ -74,9 +86,10 @@ UINT MX_NetXDuo_Init(VOID *memory_ptr);
 
 #define NX_APP_PACKET_POOL_SIZE              ((DEFAULT_PAYLOAD_SIZE + sizeof(NX_PACKET)) * 10)
 
-#define NX_APP_THREAD_STACK_SIZE             8192
+// Was 8192 - Set to 2048 16.2.26
+#define NX_APP_THREAD_STACK_SIZE             2 * 1024
 
-#define Nx_IP_INSTANCE_THREAD_SIZE           2*1024
+#define Nx_IP_INSTANCE_THREAD_SIZE           2 * 1024
 
 #define NX_APP_THREAD_PRIORITY               10
 

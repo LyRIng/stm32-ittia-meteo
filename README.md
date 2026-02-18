@@ -52,3 +52,31 @@ Branch: `master` (Pre-Production - TCP/ITTIA DB with local storage)
 
 **Demo Mode:**
 Usable for client presentations without requiring METEO hardware.
+
+**Updated 17-2-26 With IDC connection via Ethernet to Analitica** 
+Options: 'S' to enable/disable Simulator
+DHCP Enabled
+IP obtained: STM32 IpAddress: 192.168.3.165
+Runs ITTIA Data Connect agent on port 5555
+
+Analitica Demo Runs on Ubuntu v22 in local network (192.168.3.125)
+with following configuration .yaml:
+
+ittiadb-analitica:
+  url: http://127.0.0.1:8080
+
+  database:
+    meteo:
+      location: /home/rafael/meteo_ittia.ittiadb
+      access: write
+      open_mode: create
+
+  data-model:
+    meteo_weather_station:
+      database: meteo
+
+  ittia-data-connect:
+    device1:
+      agent-uri: idb+tcp://192.168.3.165:5555
+      database: meteo
+      data-model: meteo_weather_station

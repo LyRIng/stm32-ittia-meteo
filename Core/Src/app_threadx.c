@@ -13,7 +13,9 @@
   * This software is licensed under terms that can be found in the LICENSE file
   * in the root directory of this software component.
   * If no LICENSE file comes with this software, it is provided AS-IS.
-  * Version updated for IDC_ENABLED 11.2.26
+  * Version updated for IDC_ENABLED Flag 11.2.26
+  * IDC Disabled while testing Simulator up to 15.2.26
+  * Since 16.2.26 - IDC Creation Thread moved to new app_netxduo.c/.h pair 
   *
   ******************************************************************************
   */
@@ -59,7 +61,8 @@
 /* USER CODE END Before_Kernel_Start */
 
 // *** NEW: Configuration ***
-#define METEO_IDC_ENABLED  0  // Set to 1 to enable Analitica sync - testing 11/2
+// *** Since 16.2.26 -Test with new app_netxduo.c/.h pair ***
+#define METEO_IDC_ENABLED  1  // Set to 1 to enable Analitica sync - testing
 
 /* USER CODE END PD */
 
@@ -80,11 +83,12 @@ extern XSPI_HandleTypeDef hospi1;  // From CubeMX
 TX_THREAD meteo_db_thread;
 UCHAR meteo_db_thread_stack[2048];
 
-// *** NEW: IDC agent thread (if enabled) ***
+/* IDC agent moved to app_netxduo.c since 16.2.26
+/*** IDC agent thread (if enabled) ***
 #if METEO_IDC_ENABLED
 TX_THREAD idc_agent_thread;
 UCHAR idc_agent_thread_stack[4096];
-#endif
+#endif */
 
 // *** NEW: Use YOUR actual network instances from app_netxduo.c ***
 extern NX_IP NetXDuoEthIpInstance;      // Your IP instance name
@@ -99,7 +103,8 @@ extern TX_SEMAPHORE DHCPSemaphore;       // Your DHCP semaphore
 /* *** 12.2.26: Database processing thread (See end of file) *** */
 static void meteo_db_thread_entry(ULONG thread_input);
 
-#if METEO_IDC_ENABLED
+#if METEO_IDC_ENABLED_OLD
+// 16.2.26 - Moved IDC agent to app_netxduo.c 
 static void idc_agent_thread_entry(ULONG thread_input);
 #endif
 
@@ -199,7 +204,8 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
   }
   
 
-#if METEO_IDC_ENABLED
+/* IDC agent thread creation moved to NetXDuo.c as in ITTIA examples - 16.2.26
+/* #if METEO_IDC_ENABLED
   // *** Create IDC agent thread for Analitica synchronization ***
   if (tx_thread_create(&idc_agent_thread, "IDC Agent", idc_agent_thread_entry, 0,
                        idc_agent_thread_stack, sizeof(idc_agent_thread_stack),
@@ -208,7 +214,7 @@ UINT App_ThreadX_Init(VOID *memory_ptr)
     printf("[WARNING] IDC agent thread creation failed - Analitica sync disabled\n");
     // Continue anyway - local storage will still work
   }
-#endif
+#endif */
 
   /* USER CODE END App_ThreadX_Init */
 
@@ -293,9 +299,10 @@ void tx_app_thread_entry(ULONG thread_input)
   /* USER CODE END tx_app_thread_entry */
 }
 
-#if METEO_IDC_ENABLED
+#if METEO_IDC_ENABLED_OLD
 /**
-  * @brief  IDC Agent thread entry - syncs data to Analitica
+  * @brief  IDC Agent thread entry - syncs data to Analitica (previous version)
+  *         New version moved to app_netxduo.c 16.2.26
   * @param  thread_input: Not used
   * @retval None
   */
