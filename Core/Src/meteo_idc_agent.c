@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h> // 18.2.26 For size_t printing
 
 /* ITTIA DB stream processing */
 #include <ittia/db/db_stream.h>
