@@ -108,11 +108,14 @@ int run_meteo_example(db_media_driver_t driver, void * driver_info)
  * - sssss: Wind speed (5 digits)
  * - vvv:   Voltage (3 digits)
  * - CHKS:  Checksum
+ * 6.3.26 Added reading_id, auto incremented to show multiple lines
  */
 void ProcessMeteoFrameToStream(const char* frame)
 {
     uint32_t temp_adc = 0, baro_adc = 0, wdir = 0, wspeed = 0, volt = 0;
     uint16_t crcc = 0;
+    // to replace instance_id (always 1 on previous versions - 6.3.26)
+    static int32_t reading_id = 1;  // 6.3.26 Added to create new row each time
     
     /* Parse the METEO frame - upd 11.02.26 */
     if (sscanf(frame, "UUU$%5u.%5u.%4u.%5u.%3u.%4hx",
@@ -129,14 +132,16 @@ void ProcessMeteoFrameToStream(const char* frame)
         double wind_speed = wspeed / 10.0;            // Example: to m/s
         double wind_direction = wdir / 10.0;          // Already in degrees (0.1° resolution)
         
-         /* *** 11.2.26 SAFETY: Use default ID if IDC agent hasn't connected yet *** */
+        /* *** 11.2.26 SAFETY: Use default ID if IDC agent hasn't connected yet *** */
+        /* *** 6.3.26  Replace with local incrementing reading_id               *** */
         int32_t instance_id = (meteo_instance_id != NULL && *meteo_instance_id > 0) 
                               ? *meteo_instance_id 
                               : 1;  // Default instance ID       
 		
-		/* Create meteo reading - modified id 11.2.26 */
+		/* Create meteo reading - modified id 11.2.26              */
+        /* Replace instance_id with incrementing reading_id 6.3.26 */
         meteo_readings_row_t meteo = {
-            .id = instance_id,
+            .id = reading_id++, // new 6.3.26 - new rows
             .ts = timestamp,
             .temperature = temperature,
             .wind_speed = wind_speed,

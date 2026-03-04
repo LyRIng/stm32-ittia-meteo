@@ -1,9 +1,10 @@
 /**
  * @brief METEO data simulator for testing without real sensor
- * @version 10.02.26 
+ * @version 10.02.26 - rev 6.3.26
  * @author R.Oliva
  * @description Generates realistic METEO frames with correct checksums
  *              Console control: Press 'S' to toggle, 'H' for help
+ *              6.3.26 Restore writing to DB stream lines 183-190
  */
 
 #include "meteo_simulator.h"
@@ -186,7 +187,9 @@ void meteo_simulator_thread_entry(ULONG thread_input)
                 ProcessMeteoFrame(sim_frame);
                 
                 // TODO: Uncomment when queue architecture is ready
-                // ProcessMeteoFrameToStream(sim_frame);
+                // 6.3.26 - Forgot to uncomment this line, queue should work..
+                // Write to ITTIA DB stream for Analitica sync
+                ProcessMeteoFrameToStream(sim_frame);
             }
             else
             {
