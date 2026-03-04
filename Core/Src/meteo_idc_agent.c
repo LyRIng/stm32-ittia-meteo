@@ -33,11 +33,14 @@
  * 
  * This maps local streams to Analitica database tables.
  * The relation_name MUST match the table name in Analitica.
+ * 4.3.26 Added missing db_timestamp_usec_t created_time; in meteo_relation_array[]
+ * -- this is defined in idc_agent.h - line 48
  */
 static const idc_synchronized_relation_t meteo_relation_array[] = {
     {
         .model_name = kMeteoDataModelName,
         .relation_name = "meteo_readings4",      // MUST match Analitica table!
+		.created_time = 0,                       // Added 4.3.26  Was missing
         .relation_type = kRealTimeView,
         .update_interval = 1000000 / METEO_UPDATE_RATE_HZ,  // microseconds
         .max_key_cardinality = 1,
@@ -85,16 +88,29 @@ int run_meteo_idc_agent(const char * proto_name, void * proto_param)
         printf("Stream env ready: 0x%p\n", meteo_stream_env);
     }
 
-    /* Check 2: Relations */
-     const size_t relation_count = DB_ARRAY_DIM(meteo_relation_array);
-     printf("2. Relation count: %zu\n", relation_count);
-     if (relation_count == 0) {
+    /* Check 2: Relations -upd to avoid %z (not supported STM32) for size_t 3-3-26 */
+
+    //     const size_t relation_count = DB_ARRAY_DIM(meteo_relation_array);
+	//     printf("2. Relation count: %zu\n", relation_count);
+	//     if (relation_count == 0) {
+	//         printf("   ERROR: No relations defined!\n");
+	//         return EXIT_FAILURE;
+	//     }
+	//     printf("   OK: %zu relation(s) defined\n", relation_count);
+    const size_t relation_count = DB_ARRAY_DIM(meteo_relation_array);
+    printf("2. Relation count: %lu\n", (unsigned long)relation_count);  // ← Use %lu
+    if (relation_count == 0) {
          printf("   ERROR: No relations defined!\n");
          return EXIT_FAILURE;
-     }
-     printf("   OK: %zu relation(s) defined\n", relation_count);
+    }
+    printf("   OK: %lu relation(s) defined\n", (unsigned long)relation_count);
 
-     /* Check 3: Instance */
+    // *** For DEBUG 3.3.26 ***
+    printf("   DEBUG: relation_array address: %p\n", (void*)meteo_relation_array);
+    printf("   DEBUG: array size: %lu bytes\n", (unsigned long)sizeof(meteo_relation_array));
+    printf("   DEBUG: element size: %lu bytes\n", (unsigned long)sizeof(idc_synchronized_relation_t));
+
+    /* Check 3: Instance */
      printf("3. Data model instance:\n");
      printf("   - ID: %ld\n", (long)meteo_instance.instance_id);  // ← Use %ld for int32_t
      printf("   - Model: %s\n", meteo_instance.data_model_name);
