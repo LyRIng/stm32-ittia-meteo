@@ -59,7 +59,7 @@ Usable for client presentations without requiring METEO hardware.
 **Updated 17-2-26 With IDC connection via Ethernet to Analitica** 
 Options: 'S' to enable/disable Simulator
 
-DHCP Enabled
+DHCP Enabled - Will obtain IP
 IP obtained: STM32 IpAddress: 192.168.3.165
 Runs ITTIA Data Connect agent on port 5555
 
