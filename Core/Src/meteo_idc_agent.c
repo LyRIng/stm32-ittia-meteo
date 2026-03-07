@@ -36,8 +36,6 @@
  * The relation_name MUST match the table name in Analitica.
  * 4.3.26 Added missing db_timestamp_usec_t created_time; in meteo_relation_array[]
  * -- this is defined in idc_agent.h - line 48
- * 6.3.26 Update .update_interval from 1000000 (1s) to 2000000 (2s)
- *   and .max_key_cardinality = 1000,    [ 6.3.26 Allow up to 1000 rows (was 1)]
  */
 static const idc_synchronized_relation_t meteo_relation_array[] = {
     {
