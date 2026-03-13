@@ -36,6 +36,9 @@
  * The relation_name MUST match the table name in Analitica.
  * 4.3.26 Added missing db_timestamp_usec_t created_time; in meteo_relation_array[]
  * -- this is defined in idc_agent.h - line 48
+ * 11.3.26 ITTIA/Ryan suggests lower update_iterval for METEO's low speed data
+ * -- since Analitica updates at 1/20th this rate, 2e6 us gave 20sec.
+ * -- 13.3.26 - test with 2e5 us to observe 2 sec update on Analitica
  */
 static const idc_synchronized_relation_t meteo_relation_array[] = {
     {
@@ -43,7 +46,7 @@ static const idc_synchronized_relation_t meteo_relation_array[] = {
         .relation_name = "meteo_readings4",      // MUST match Analitica table!
 		.created_time = 0,                       // Added 4.3.26  Was missing
         .relation_type = kRealTimeView,
-        .update_interval = 2000000 / METEO_UPDATE_RATE_HZ,  // microseconds upd 6.3.26
+        .update_interval = 200000 / METEO_UPDATE_RATE_HZ,  // 2e6 microseconds (6.3.26) red.to 2e5 13.3
         .max_key_cardinality = 1000,             // 6.3.26 Allow up to 1000 rows (was 1)
     },
 };
@@ -68,13 +71,14 @@ static idc_data_model_instance_t meteo_instance = {
  * @param proto_name Protocol name (should be "idb+tcp")
  * @param proto_param Protocol parameters (db_netxduo_tcp_options_t*)
  * @return EXIT_SUCCESS (or loops forever on error with retry)
+ * 13.3.26 Removed 0x before %p print, to avoid double "0x"
  */
 int run_meteo_idc_agent(const char * proto_name, void * proto_param)
 {
     meteo_instance_id = &meteo_instance.instance_id;
 	
     printf("\n=== PRE-FLIGHT CHECKS ===\n"); // Added 17.2.26
-	printf("1.IDC Agent: meteo_stream_env = 0x%p\n", meteo_stream_env);  // Added 17.2.26
+	printf("1.IDC Agent: meteo_stream_env = %p\n", meteo_stream_env);  // 0x elim before %p 13.3.26
 
     /* Check stream env is initialized */
     if (meteo_stream_env == NULL)
@@ -87,7 +91,7 @@ int run_meteo_idc_agent(const char * proto_name, void * proto_param)
         {
             os_sleep(WAIT_MILLISEC(500));
         }
-        printf("Stream env ready: 0x%p\n", meteo_stream_env);
+        printf("Stream env ready: %p\n", meteo_stream_env); // 0x elim before %p 13.3.26
     }
 
     /* Check 2: Relations -upd to avoid %z (not supported STM32) for size_t 3-3-26 */
@@ -127,8 +131,8 @@ int run_meteo_idc_agent(const char * proto_name, void * proto_param)
 
      db_netxduo_tcp_options_t* opts = (db_netxduo_tcp_options_t*)proto_param;
      printf("   - Port: %d\n", (int)opts->netxduo_tcp_port);
-     printf("   - Packet pool: 0x%p\n", (void*)opts->netxduo_packet_pool);
-     printf("   - IP instance: 0x%p\n", (void*)opts->netxduo_tcp_interface);
+     printf("   - Packet pool: %p\n", (void*)opts->netxduo_packet_pool);   // 0x elim before %p 13.3.26
+     printf("   - IP instance: %p\n", (void*)opts->netxduo_tcp_interface); // 0x elim before %p 13.3.26
 
      /* Check 5: Network is ready */
      ULONG ip_address, network_mask;
